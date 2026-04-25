@@ -35,7 +35,10 @@ def test_signup_creates_user_and_seeds(token, auth):
     txns = requests.get(f"{API}/transactions", headers=auth, timeout=15).json()
     assert len(txns) >= 50, f"Expected ~55 txns, got {len(txns)}"
     goals = requests.get(f"{API}/goals", headers=auth, timeout=15).json()
-    assert len(goals) == 3
+    assert len(goals) == 6, f"Expected 6 seeded goals (iter-3), got {len(goals)}"
+    # tier present on every goal
+    for g in goals:
+        assert g.get("tier") in ("short", "mid", "long", "critical"), f"Bad tier on {g}"
     budget = requests.get(f"{API}/budget", headers=auth, timeout=15).json()
     assert budget.get("income", 0) > 0
 
@@ -303,6 +306,184 @@ def test_milestones_default_seed_and_crud(auth):
     r4 = requests.get(f"{API}/milestones", headers=auth, timeout=15).json()
     assert not any(m["id"] == mid for m in r4)
 
+
+
+
+# ============================================================
+# Iteration 3 — Super Chart, Allocation, Bonds, MF, Metals, XIRR
+# ============================================================
+
+# ---- Super Chart ----
+def test_super_chart_lifetime(auth):
+    r = requests.get(f"{API}/networth/super-chart", headers=auth, params={"range": "lifetime", "inflation": "false"}, timeout=15)
+    assert r.status_code == 200
+    d = r.json()
+    for k in ["points", "amount_milestones", "life_milestones", "today_value", "future_value", "start_age", "end_age"]:
+        assert k in d, f"missing key {k}"
+    assert d["start_age"] == 30
+    assert d["end_age"] == 65
+    # 30..65 inclusive => 36 points
+    assert len(d["points"]) == 36
+    assert len(d["amount_milestones"]) == 5
+    assert len(d["life_milestones"]) == 4
+    # life milestones must include defaults
+    names = {m["name"] for m in d["life_milestones"]}
+    assert {"Buy Car", "Buy House", "Child Education", "FIRE"}.issubset(names)
+    # amount milestones labels
+    labels = [m["label"] for m in d["amount_milestones"]]
+    assert labels == ["₹25L", "₹50L", "₹1Cr", "₹2Cr", "₹5Cr"]
+    # optimized > current (almost always at end age)
+    last = d["points"][-1]
+    assert last["optimized"] > last["current"]
+
+
+def test_super_chart_1y_shorter_points(auth):
+    r = requests.get(f"{API}/networth/super-chart", headers=auth, params={"range": "1Y"}, timeout=15)
+    assert r.status_code == 200
+    d = r.json()
+    assert d["end_age"] == 31
+    assert len(d["points"]) == 2  # ages 30,31
+
+
+def test_super_chart_inflation_reduces_values(auth):
+    r1 = requests.get(f"{API}/networth/super-chart", headers=auth, params={"range": "lifetime", "inflation": "false"}, timeout=15).json()
+    r2 = requests.get(f"{API}/networth/super-chart", headers=auth, params={"range": "lifetime", "inflation": "true"}, timeout=15).json()
+    assert r2["points"][-1]["optimized"] < r1["points"][-1]["optimized"]
+    assert r2["inflation_adjusted"] is True
+
+
+def test_super_chart_no_auth():
+    r = requests.get(f"{API}/networth/super-chart", timeout=15)
+    assert r.status_code in (401, 403)
+
+
+# ---- Allocation Analytics ----
+def test_allocation_default(auth):
+    r = requests.get(f"{API}/allocation", headers=auth, timeout=15)
+    assert r.status_code == 200
+    d = r.json()
+    for k in ["current", "recommended", "drift", "rebalance_impact_15y", "rebalance_actions", "risk_profile"]:
+        assert k in d
+    keys = {"Cash", "Equity", "Debt", "Gold", "Others"}
+    assert set(d["current"].keys()) == keys
+    assert set(d["recommended"].keys()) == keys
+    assert d["recommended"]["Equity"] == 55  # moderate default
+
+
+def test_allocation_aggressive_profile(auth):
+    r = requests.get(f"{API}/allocation", headers=auth, params={"profile": "aggressive"}, timeout=15)
+    assert r.status_code == 200
+    d = r.json()
+    assert d["risk_profile"] == "aggressive"
+    assert d["recommended"]["Equity"] == 70
+
+
+def test_allocation_no_auth():
+    r = requests.get(f"{API}/allocation", timeout=15)
+    assert r.status_code in (401, 403)
+
+
+# ---- Bonds ----
+def test_bonds_list(auth):
+    r = requests.get(f"{API}/bonds", headers=auth, timeout=15)
+    assert r.status_code == 200
+    items = r.json()
+    assert isinstance(items, list)
+    assert len(items) == 9
+    req = {"name", "issuer", "rating", "yield_pct", "duration_years", "risk", "liquidity", "horizon"}
+    for it in items:
+        assert req.issubset(it.keys()), f"Missing in {it}"
+    ratings = {it["rating"] for it in items}
+    for must in ["AAA", "AA", "A", "A-", "BBB", "BB"]:
+        assert must in ratings, f"Missing rating {must}"
+
+
+def test_bonds_no_auth():
+    r = requests.get(f"{API}/bonds", timeout=15)
+    assert r.status_code in (401, 403)
+
+
+# ---- Mutual Funds ----
+def test_mutual_funds_top(auth):
+    r = requests.get(f"{API}/mutual-funds/top", headers=auth, timeout=15)
+    assert r.status_code == 200
+    d = r.json()
+    for k in ["user_mf_xirr", "benchmark_xirr", "underperforming", "categories"]:
+        assert k in d
+    cats = d["categories"]
+    expected = {"Large Cap", "Flexi Cap", "Mid Cap", "Small Cap", "Hybrid", "Index", "Debt", "ELSS", "International"}
+    assert expected.issubset(set(cats.keys()))
+    assert len(cats) == 9
+    for name, funds in cats.items():
+        assert isinstance(funds, list) and 1 <= len(funds) <= 2
+        for f in funds:
+            assert {"name", "ret_1y", "ret_3y", "ret_5y", "expense", "why"}.issubset(f.keys())
+    assert isinstance(d["underperforming"], bool)
+
+
+def test_mutual_funds_no_auth():
+    r = requests.get(f"{API}/mutual-funds/top", timeout=15)
+    assert r.status_code in (401, 403)
+
+
+# ---- Precious Metals ----
+def test_precious_metals(auth):
+    r = requests.get(f"{API}/precious-metals", headers=auth, timeout=15)
+    assert r.status_code == 200
+    d = r.json()
+    assert "gold" in d and "silver" in d
+    req = {"spot", "change_1m", "change_3m", "change_1y", "change_from_peak", "year_high", "year_low",
+           "trend_1y", "ai_signal", "reason", "user_holding_value", "user_target_pct", "user_current_pct"}
+    for k in ("gold", "silver"):
+        m = d[k]
+        assert req.issubset(m.keys()), f"Missing in {k}: {req - set(m.keys())}"
+        assert isinstance(m["trend_1y"], list) and len(m["trend_1y"]) == 12
+        for pt in m["trend_1y"]:
+            assert "d" in pt and "v" in pt
+
+
+def test_precious_metals_no_auth():
+    r = requests.get(f"{API}/precious-metals", timeout=15)
+    assert r.status_code in (401, 403)
+
+
+# ---- XIRR Analytics ----
+def test_xirr_analytics(auth):
+    r = requests.get(f"{API}/xirr-analytics", headers=auth, timeout=15)
+    assert r.status_code == 200
+    items = r.json()
+    assert isinstance(items, list)
+    assert len(items) == 5
+    req = {"asset", "xirr", "benchmark", "alpha", "quality_score", "value", "icon"}
+    for it in items:
+        assert req.issubset(it.keys()), f"Missing in {it}"
+
+
+def test_xirr_no_auth():
+    r = requests.get(f"{API}/xirr-analytics", timeout=15)
+    assert r.status_code in (401, 403)
+
+
+# ---- Goals tier seeding (iter-3) ----
+def test_goals_seeded_with_tiers(auth):
+    items = requests.get(f"{API}/goals", headers=auth, timeout=15).json()
+    assert len(items) == 6
+    tiers = {g["tier"] for g in items}
+    assert {"short", "mid", "long", "critical"}.issubset(tiers)
+    names = {g["name"] for g in items}
+    # Spot-check a few of the iter-3 seeded names
+    assert "Buy Car" in names
+    assert "Emergency Fund (6mo)" in names
+
+
+# ---- Milestones seeded at signup (iter-3) ----
+def test_milestones_seeded_at_signup_iter3(auth):
+    items = requests.get(f"{API}/milestones", headers=auth, timeout=15).json()
+    assert len(items) >= 4
+    names = {it["name"] for it in items}
+    assert {"Buy Car", "Buy House", "Child Education", "FIRE"}.issubset(names)
+    for it in items:
+        assert it.get("tier") in ("short", "mid", "long", "critical")
 
 def test_milestones_no_auth():
     r = requests.get(f"{API}/milestones", timeout=15)

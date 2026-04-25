@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { inr } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -6,19 +6,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Home, Shield, Sunset, Plane, GraduationCap, Car, Heart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const ICONS = { Home, Shield, Sunset, Plane, GraduationCap, Car, Heart, Target: Home };
+const TIER_META = { short: { l: "Short", c: "bg-chart-3" }, mid: { l: "Mid", c: "bg-secondary" }, long: { l: "Long", c: "bg-accent" }, critical: { l: "Critical", c: "bg-destructive" } };
 
 export default function Goals() {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [sim, setSim] = useState(null);
-  const [form, setForm] = useState({ name: "", target: "", current: 0, monthly_contrib: "", deadline: "", icon: "Home", instrument: "Mutual Fund SIP" });
+  const [tier, setTier] = useState("all");
+  const [form, setForm] = useState({ name: "", target: "", current: 0, monthly_contrib: "", deadline: "", icon: "Home", instrument: "Mutual Fund SIP", tier: "mid" });
 
   const load = async () => { const r = await api.get("/goals"); setItems(r.data); };
   useEffect(() => { load(); }, []);
+
+  const filtered = useMemo(() => tier === "all" ? items : items.filter(i => (i.tier || "mid") === tier), [items, tier]);
 
   const submit = async () => {
     try {
@@ -28,10 +33,7 @@ export default function Goals() {
   };
   const del = async (id) => { await api.delete(`/goals/${id}`); load(); };
 
-  const monthsTo = (g) => {
-    const need = g.target - g.current; if (need <= 0) return 0;
-    return Math.ceil(need / Math.max(1, g.monthly_contrib));
-  };
+  const monthsTo = (g) => { const need = g.target - g.current; if (need <= 0) return 0; return Math.ceil(need / Math.max(1, g.monthly_contrib)); };
   const probability = (g) => {
     const months = monthsTo(g);
     const target_months = Math.max(1, Math.round((new Date(g.deadline) - Date.now()) / (1000*60*60*24*30)));
@@ -39,7 +41,7 @@ export default function Goals() {
   };
 
   return (
-    <div className="px-4 lg:px-10 py-6 lg:py-10 space-y-7 max-w-[1400px] mx-auto">
+    <div className="px-4 lg:px-10 py-6 lg:py-10 space-y-6 max-w-[1400px] mx-auto">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Goals</div>
@@ -56,6 +58,17 @@ export default function Goals() {
                 <div className="space-y-2"><Label>Already saved ₹</Label><Input type="number" value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} /></div>
                 <div className="space-y-2"><Label>Monthly ₹</Label><Input type="number" value={form.monthly_contrib} onChange={(e) => setForm({ ...form, monthly_contrib: e.target.value })} /></div>
                 <div className="space-y-2"><Label>Deadline</Label><Input type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} /></div>
+                <div className="space-y-2 col-span-2"><Label>Tier</Label>
+                  <Select value={form.tier} onValueChange={(v) => setForm({ ...form, tier: v })}>
+                    <SelectTrigger data-testid="goal-tier-select"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="short">Short term</SelectItem>
+                      <SelectItem value="mid">Mid term</SelectItem>
+                      <SelectItem value="long">Long term</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <Button onClick={submit} className="w-full rounded-xl" data-testid="goal-submit-btn">Save</Button>
             </div>
@@ -63,19 +76,33 @@ export default function Goals() {
         </Dialog>
       </header>
 
+      {/* Tier filter */}
+      <div className="flex gap-2 flex-wrap">
+        {["all", "short", "mid", "long", "critical"].map(t => (
+          <button key={t} onClick={() => setTier(t)} data-testid={`goal-tier-filter-${t}`}
+            className={`text-xs px-3 py-1.5 rounded-full font-bold border capitalize ${tier === t ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"}`}>
+            {t === "all" ? "All goals" : (TIER_META[t]?.l + " term")}
+          </button>
+        ))}
+      </div>
+
       <div className="grid lg:grid-cols-2 gap-4">
-        {items.map((g) => {
+        {filtered.map((g) => {
           const pct = Math.min(100, (g.current / g.target) * 100);
           const Icon = ICONS[g.icon] || Home;
           const months = monthsTo(g);
           const prob = probability(g);
+          const tmeta = TIER_META[g.tier || "mid"];
           return (
             <div key={g.id} className="fp-card p-6 space-y-4 group" data-testid={`goal-card-${g.id}`}>
               <div className="flex justify-between items-start">
                 <div className="flex gap-3 items-start">
                   <div className="w-11 h-11 rounded-xl bg-accent/15 text-accent grid place-items-center"><Icon className="w-5 h-5" /></div>
                   <div>
-                    <div className="font-headings font-semibold text-lg">{g.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-headings font-semibold text-lg">{g.name}</div>
+                      {tmeta && <span className={`text-[10px] uppercase font-bold tracking-widest px-1.5 py-0.5 rounded ${tmeta.c} text-white`}>{tmeta.l}</span>}
+                    </div>
                     <div className="text-xs text-muted-foreground">{g.instrument} · ETA {months} months</div>
                   </div>
                 </div>
@@ -117,9 +144,6 @@ function SimContent({ goal }) {
       </div>
       <div className="space-y-2"><Label>Monthly contribution: ₹{Number(contrib).toLocaleString()}</Label><Slider min={1000} max={200000} step={1000} value={[contrib]} onValueChange={(v) => setContrib(v[0])} /></div>
       <div className="space-y-2"><Label>Lump sum (bonus / windfall): ₹{Number(lump).toLocaleString()}</Label><Slider min={0} max={2000000} step={10000} value={[lump]} onValueChange={(v) => setLump(v[0])} /></div>
-      <div className="p-4 rounded-xl bg-accent/10 text-sm">
-        Add a ₹{Math.round((contrib - goal.monthly_contrib) || 4000).toLocaleString()}/mo bump to land your goal {Math.max(1, Math.round((goal.target/goal.monthly_contrib - months) || 6))} months sooner.
-      </div>
     </div>
   );
 }

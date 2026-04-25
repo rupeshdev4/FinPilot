@@ -1,0 +1,34 @@
+{
+  "summary": "FinPilot iter-3 testing complete. Backend: 45/45 pytest tests pass (100%) — covers all 6 new iter-3 endpoints (super-chart with range/inflation, allocation incl. profile switch, bonds with 9 ratings spanning AAA..BB, mutual-funds/top with 9 categories, precious-metals gold+silver with 12-pt trend, xirr-analytics 5 rows) plus signup-seeded 6 goals (with tier) and 4 milestones, plus auth-required guards. Frontend (Playwright on /app/networth, /app/goals, /app/transactions): Super Chart renders with 5 amount-milestone cards, all 4 range tabs switch, inflation Switch toggles, Scenario Simulator exposes exactly 5 sliders, Allocation Analytics 3 risk tabs (conservative/moderate/aggressive) work and Auto-rebalance click toasts, Bonds table shows 9 rows initially and exactly 3 AAA after filter, MF Analyst exposes 9 category tabs and 1-2 funds per category, Gold + Silver cards both render with 'Start staggered buy' working, XIRR Analytics shows 5 rows. Goals page: 6 seeded cards rendered, tier filter chips work (critical → 2 cards). Transactions: upcoming-row click opens detail dialog with reminder Switch and AI low-balance alert path verified (emi row exists).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "NetWorth charts (Super Chart, Precious Metals trend, Allocation pies)", "issues": ["Recharts emits 'width(-1) and height(-1)' warnings repeatedly — ResponsiveContainer parents likely lack explicit min-height/aspect. Cosmetic but noisy in console (carryover from iter-2)."]},
+      {"screen": "Upcoming-tx Detail Dialog & Add-milestone Dialog", "issues": ["DialogContent missing Description/aria-describedby — a11y warning (carryover from iter-2)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_finpilot_api.py", "/app/test_reports/pytest/iteration_3_results.xml"],
+  "action_items": [
+    "(Optional, low-pri) Fix Recharts width(-1)/height(-1) warnings by setting explicit min-height (e.g. 240px) on the ResponsiveContainer parents in NetWorth.jsx (super-chart, gold-trend, silver-trend, allocation pies).",
+    "(Optional, low-pri) Add `aria-describedby` / DialogDescription to NetWorth Add-milestone dialog and Transactions detail dialog.",
+    "(Future iter-4 phase-2) Replace mocked bond list, MF top, gold/silver spot, XIRR analytics with broker connect + MMTC/live feed integrations as planned."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/server.py is now 1140 lines — well past the 700-line guideline. Strongly recommend splitting into routers: auth.py, networth.py (incl. super-chart), holdings.py, milestones.py, allocation.py, markets.py (bonds/mf/metals/xirr), ai.py.",
+    "Path param shadowing: /api/networth/super-chart accepts `range: str` query param but `range` shadows Python's built-in `range()`; an explicit `range_years()` helper is defined to work around it. Rename the query param to `period` (or alias) to avoid the shadow.",
+    "/api/precious-metals trend_1y uses `random.uniform(-50, 50)` per request → trend points jitter on every refresh (non-deterministic UX, visible on the chart). Seed once or persist per user.",
+    "/api/allocation hard-codes `gold_est = 120000` and `rebalance_impact_15y = 3800000` regardless of user holdings — fine for MVP but should derive from user holdings/age in next iter.",
+    "/api/allocation `equity` detection greps account.institution for 'zerodha'/'groww' and `debt` for 'EPFO'/'PPF' (case-mixed). Brittle string match — move to an explicit `category` field on accounts.",
+    "Bonds list, MF list, gold/silver spot, XIRR analytics all hard-coded inside route handlers. Extract to /app/backend/seeds/markets.py for cleaner testing/diffing."
+  ],
+  "updated_files": ["/app/backend/tests/test_finpilot_api.py"],
+  "success_rate": {"backend": "100% (45/45)", "frontend": "100% (all iter-3 flows verified: super-chart, sliders, allocation, bonds filter, MF tabs, metals, XIRR, goals tier filter, upcoming-tx detail dialog)"},
+  "test_credentials": "demo@finpilot.ai / demo123 (already onboarded with 6 goals, 4 milestones, 11 accounts, ~55 txns)",
+  "seed_data_creation": "test_finpilot_api.py creates a fresh TEST_<uuid>@finpilot.ai user via /auth/signup which auto-seeds 11 accounts, 55 txns, 6 goals (with tiers), 4 milestones, and a default budget. Test cleans up TEST_Vacation milestone after CRUD assertions.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_finpilot_api.py now has 45 tests (iter-1+2+3 combined). Update the seeded-goals count in test_signup_creates_user_and_seeds when the seed list changes again. For frontend, prefer wait_for_function on `[data-testid^=upcoming-row-].length > 0` and `[data-testid^=goal-card-].length > 0` to avoid the iter-2 race condition. Recharts warnings and DialogContent a11y warnings are pre-existing and tracked under design_issues.",
+  "rca of the issue": "No defects found in iter-3 implementation. All 6 new endpoints conform to the requested response shapes; super-chart correctly bumps point count by range and reduces nominal values when inflation=true; allocation flips recommended Equity 25/55/70 across conservative/moderate/aggressive; goals/milestones now seeded at signup (idempotent on read, addressing iter-2 GET-side-effect concern). Frontend wires every component via REACT_APP_BACKEND_URL with proper data-testid coverage."
+}

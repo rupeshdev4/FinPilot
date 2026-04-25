@@ -5,21 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Download, Trash2, CalendarDays, Banknote, Home as HomeI, Receipt, Tv, Wifi, Heart, Briefcase } from "lucide-react";
+import { Plus, Search, Download, Trash2, CalendarDays, Banknote, Home as HomeI, Receipt, Tv, Wifi, Heart, Briefcase, AlertTriangle, Bell } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line } from "recharts";
 import { toast } from "sonner";
 
 const CATS = ["Food", "Travel", "Shopping", "Bills", "Rent", "EMI", "Salary", "Investments", "Healthcare", "Entertainment", "Other"];
 
 const TAG_META = {
-  income: { color: "bg-accent/15 text-accent", icon: Banknote },
-  rent: { color: "bg-secondary/15 text-secondary", icon: HomeI },
-  emi: { color: "bg-warning/15 text-warning", icon: Receipt },
-  investment: { color: "bg-chart-2/15 text-chart-2", icon: Briefcase },
-  utility: { color: "bg-chart-3/15 text-chart-3", icon: Wifi },
-  subscription: { color: "bg-chart-5/15 text-chart-5", icon: Tv },
-  insurance: { color: "bg-destructive/15 text-destructive", icon: Heart },
+  income: { color: "bg-accent/15 text-accent", icon: Banknote, label: "Income" },
+  rent: { color: "bg-secondary/15 text-secondary", icon: HomeI, label: "Rent" },
+  emi: { color: "bg-warning/15 text-warning", icon: Receipt, label: "EMI" },
+  investment: { color: "bg-chart-2/15 text-chart-2", icon: Briefcase, label: "Investment" },
+  utility: { color: "bg-chart-3/15 text-chart-3", icon: Wifi, label: "Utility" },
+  subscription: { color: "bg-chart-5/15 text-chart-5", icon: Tv, label: "Subscription" },
+  insurance: { color: "bg-destructive/15 text-destructive", icon: Heart, label: "Insurance" },
 };
 
 export default function Transactions() {
@@ -28,6 +29,8 @@ export default function Transactions() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [reminders, setReminders] = useState({});
   const [form, setForm] = useState({ amount: "", category: "Food", merchant: "", note: "" });
 
   const load = async () => {
@@ -108,6 +111,15 @@ export default function Transactions() {
           </div>
           <div className="text-sm text-muted-foreground">{upcoming.length} fixed transactions · <span className="text-accent font-medium">{inr(upcoming.reduce((s,u)=>s+(u.amount<0?u.amount:0),0))} outflow</span></div>
         </div>
+
+        {/* AI Alert: clustered bills */}
+        {upcoming.length > 0 && (
+          <div className="fp-ai-panel rounded-xl p-3 flex items-center gap-3" data-testid="ai-upcoming-alert">
+            <div className="w-9 h-9 rounded-lg bg-warning/20 text-warning grid place-items-center"><AlertTriangle className="w-4 h-4" /></div>
+            <div className="flex-1 text-sm"><span className="font-bold">Heads up:</span> 4 bills cluster between the 5th and 12th totaling {inr(upcoming.slice(0,4).reduce((s,u)=>s+u.amount,0))}. Keep ₹50K buffer in HDFC Savings to avoid auto-debit failures.</div>
+          </div>
+        )}
+
         <div className="grid grid-cols-7 gap-1.5 fp-card p-3">
           {Array.from({ length: 30 }).map((_, i) => {
             const dt = new Date(); dt.setDate(dt.getDate() + i);
@@ -118,7 +130,7 @@ export default function Transactions() {
                 <div className="font-bold text-muted-foreground mb-0.5">{dt.getDate()}</div>
                 {todays.slice(0,2).map((t, j) => {
                   const meta = TAG_META[t.tag] || { color: "bg-muted", icon: Receipt };
-                  return <div key={j} className={`px-1 py-0.5 rounded text-[9px] truncate font-medium mb-0.5 ${meta.color}`}>{t.name}</div>;
+                  return <button key={j} onClick={() => setDetail(t)} className={`block w-full text-left px-1 py-0.5 rounded text-[9px] truncate font-medium mb-0.5 ${meta.color} hover:opacity-80`}>{t.name}</button>;
                 })}
                 {todays.length > 2 && <div className="text-[9px] text-muted-foreground">+{todays.length-2} more</div>}
               </div>
@@ -130,18 +142,46 @@ export default function Transactions() {
             const meta = TAG_META[u.tag] || { color: "bg-muted text-muted-foreground", icon: Receipt };
             const Icon = meta.icon;
             return (
-              <div key={i} className="fp-card p-3 flex items-center gap-3" data-testid={`upcoming-row-${i}`}>
+              <button key={i} onClick={() => setDetail(u)} className="fp-card p-3 flex items-center gap-3 text-left hover:-translate-y-0.5 transition-transform" data-testid={`upcoming-row-${i}`}>
                 <div className={`w-9 h-9 rounded-lg grid place-items-center ${meta.color}`}><Icon className="w-4 h-4" /></div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{u.name}</div>
-                  <div className="text-[11px] text-muted-foreground">{shortDate(u.date)} · <span className="capitalize">{u.tag}</span></div>
+                  <div className="text-[11px] text-muted-foreground">{shortDate(u.date)} · {meta.label}</div>
                 </div>
                 <div className={`font-headings font-semibold text-sm ${u.amount > 0 ? "text-accent" : ""}`}>{u.amount>0?"+":""}{inr(u.amount)}</div>
-              </div>
+              </button>
             );
           })}
         </div>
       </section>
+
+      {/* Detail dialog */}
+      {detail && (
+        <Dialog open={!!detail} onOpenChange={(o) => !o && setDetail(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>{detail.name}</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-muted rounded-xl p-3"><div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Amount</div><div className={`font-headings font-bold text-xl ${detail.amount > 0 ? "text-accent" : ""}`}>{inr(detail.amount, { compact: false })}</div></div>
+                <div className="bg-muted rounded-xl p-3"><div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Date</div><div className="font-headings font-bold text-xl">{shortDate(detail.date)}</div></div>
+                <div className="bg-muted rounded-xl p-3"><div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Tag</div><div className="font-headings font-semibold capitalize">{detail.tag}</div></div>
+                <div className="bg-muted rounded-xl p-3"><div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Account</div><div className="font-headings font-semibold">{detail.merchant}</div></div>
+              </div>
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-border">
+                <Bell className="w-4 h-4 text-accent" />
+                <div className="flex-1"><div className="text-sm font-medium">Reminder 2 days prior</div><div className="text-xs text-muted-foreground">We'll alert you so balance is ready.</div></div>
+                <Switch checked={!!reminders[detail.day]} onCheckedChange={(v) => { setReminders({ ...reminders, [detail.day]: v }); toast.success(v ? "Reminder on" : "Reminder off"); }} data-testid="reminder-toggle" />
+              </div>
+              {detail.tag === "emi" && (
+                <div className="fp-ai-panel rounded-xl p-3 text-sm flex gap-2 items-start">
+                  <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                  <div><span className="font-bold">AI Alert:</span> Your HDFC Savings will be ~₹35K below threshold by EMI date. Move ₹40K from PhonePe wallet 2 days before to avoid bounce charges.</div>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Categories overview */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">

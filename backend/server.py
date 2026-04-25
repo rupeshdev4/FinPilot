@@ -120,6 +120,7 @@ class GoalCreate(BaseModel):
     monthly_contrib: Optional[float] = 0
     deadline: datetime
     instrument: Optional[str] = "Mutual Fund SIP"
+    tier: Optional[str] = "mid"
 
 class Budget(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -270,12 +271,25 @@ async def seed_demo_data(user_id: str):
 
     # Goals
     goals = [
-        {"name": "Buy House", "icon": "Home", "target": 8000000, "current": 1500000, "monthly_contrib": 35000, "deadline": (now + timedelta(days=365*7)).isoformat(), "instrument": "Equity Mutual Funds"},
-        {"name": "Emergency Fund", "icon": "Shield", "target": 600000, "current": 285000, "monthly_contrib": 10000, "deadline": (now + timedelta(days=365*2)).isoformat(), "instrument": "Liquid Fund"},
-        {"name": "Retirement", "icon": "Sunset", "target": 50000000, "current": 1300000, "monthly_contrib": 25000, "deadline": (now + timedelta(days=365*25)).isoformat(), "instrument": "Index Fund + EPF"},
+        {"name": "Vacation - Bali", "icon": "Plane", "target": 250000, "current": 80000, "monthly_contrib": 8000, "deadline": (now + timedelta(days=365)).isoformat(), "instrument": "Liquid Fund", "tier": "short"},
+        {"name": "Buy Car", "icon": "Car", "target": 1200000, "current": 350000, "monthly_contrib": 18000, "deadline": (now + timedelta(days=365*2)).isoformat(), "instrument": "Hybrid Fund", "tier": "mid"},
+        {"name": "Buy House (Bangalore)", "icon": "Home", "target": 8000000, "current": 1500000, "monthly_contrib": 35000, "deadline": (now + timedelta(days=365*7)).isoformat(), "instrument": "Equity Mutual Funds", "tier": "long"},
+        {"name": "Emergency Fund (6mo)", "icon": "Shield", "target": 600000, "current": 285000, "monthly_contrib": 10000, "deadline": (now + timedelta(days=365)).isoformat(), "instrument": "Liquid Fund + FD", "tier": "critical"},
+        {"name": "Child Education", "icon": "GraduationCap", "target": 5000000, "current": 200000, "monthly_contrib": 15000, "deadline": (now + timedelta(days=365*15)).isoformat(), "instrument": "Equity + ELSS", "tier": "critical"},
+        {"name": "FIRE @ 50", "icon": "Sunset", "target": 50000000, "current": 1300000, "monthly_contrib": 25000, "deadline": (now + timedelta(days=365*20)).isoformat(), "instrument": "Index Fund + EPF + NPS", "tier": "long"},
     ]
     for g in goals:
         await db.goals.insert_one({**g, "id": str(uuid.uuid4()), "user_id": user_id})
+
+    # Milestones
+    ms = [
+        {"name": "Buy Car", "icon": "Car", "tier": "short", "target_amount": 1200000, "target_age": 32},
+        {"name": "Buy House", "icon": "Home", "tier": "long", "target_amount": 8000000, "target_age": 36},
+        {"name": "Child Education", "icon": "GraduationCap", "tier": "critical", "target_amount": 5000000, "target_age": 48},
+        {"name": "FIRE", "icon": "Sunset", "tier": "long", "target_amount": 50000000, "target_age": 50},
+    ]
+    for m in ms:
+        await db.milestones.insert_one({**m, "id": str(uuid.uuid4()), "user_id": user_id})
 
     # Budget
     budget = {
@@ -868,18 +882,6 @@ class MilestoneIn(BaseModel):
 @api.get("/milestones")
 async def list_milestones(user: dict = Depends(current_user)):
     items = await db.milestones.find({"user_id": user["id"]}, {"_id": 0}).to_list(50)
-    if not items:
-        defaults = [
-            {"name": "Buy Car", "icon": "Car", "tier": "short", "target_amount": 1200000, "target_age": 32},
-            {"name": "Buy House", "icon": "Home", "tier": "long", "target_amount": 8000000, "target_age": 38},
-            {"name": "Child Education", "icon": "GraduationCap", "tier": "critical", "target_amount": 5000000, "target_age": 48},
-            {"name": "FIRE", "icon": "Sunset", "tier": "long", "target_amount": 50000000, "target_age": 55},
-        ]
-        for d in defaults:
-            doc = {"id": str(uuid.uuid4()), "user_id": user["id"], **d}
-            await db.milestones.insert_one(doc.copy())
-            doc.pop("_id", None)
-            items.append(doc)
     return items
 
 @api.post("/milestones")
@@ -893,6 +895,227 @@ async def add_milestone(req: MilestoneIn, user: dict = Depends(current_user)):
 async def del_milestone(mid: str, user: dict = Depends(current_user)):
     await db.milestones.delete_one({"id": mid, "user_id": user["id"]})
     return {"ok": True}
+
+
+# ----- Super Chart (life + amount milestones, zoom, inflation) -----
+@api.get("/networth/super-chart")
+async def super_chart(user: dict = Depends(current_user), range: str = "lifetime", inflation: bool = False):
+    accounts = await db.accounts.find({"user_id": user["id"]}, {"_id": 0}).to_list(200)
+    user_milestones = await db.milestones.find({"user_id": user["id"]}, {"_id": 0}).to_list(50)
+    total = sum(a["balance"] for a in accounts)
+    start_age = 30
+    end_age = {"1Y": 31, "5Y": 35, "10Y": 40, "lifetime": 65}.get(range, 65)
+
+    monthly_current = 45000
+    monthly_optimized = 62000
+    cagr_current = 0.11
+    cagr_optimized = 0.13
+    inflation_rate = 0.06 if inflation else 0
+
+    points = []
+    cur, opt = max(total, 200000), max(total, 200000)
+    for yr in range_years(0, end_age - start_age + 1):
+        age = start_age + yr
+        # Real returns if inflation toggle on
+        real_cur = (1 + cagr_current) / (1 + inflation_rate) - 1
+        real_opt = (1 + cagr_optimized) / (1 + inflation_rate) - 1
+        if yr > 0:
+            cur = cur * (1 + real_cur) + monthly_current * 12
+            opt = opt * (1 + real_opt) + monthly_optimized * 12
+        points.append({"age": age, "current": round(cur), "optimized": round(opt)})
+
+    # Amount milestones with eta on optimized path
+    amt_targets = [(2500000, "₹25L"), (5000000, "₹50L"), (10000000, "₹1Cr"), (20000000, "₹2Cr"), (50000000, "₹5Cr")]
+    amount_ms = []
+    for amt, lbl in amt_targets:
+        eta_pt = next((p for p in points if p["optimized"] >= amt), None)
+        achieved = total >= amt
+        amount_ms.append({
+            "amount": amt, "label": lbl, "achieved": achieved,
+            "age": eta_pt["age"] if eta_pt else end_age,
+            "value_at_age": eta_pt["optimized"] if eta_pt else amt,
+            "years_away": (eta_pt["age"] - start_age) if eta_pt else None,
+        })
+
+    # Life milestones — find the year their value crosses target_amount
+    life_ms = []
+    for m in user_milestones:
+        eta_pt = next((p for p in points if p["age"] >= m["target_age"]), None) or points[-1]
+        achievable = eta_pt["optimized"] >= m["target_amount"]
+        life_ms.append({
+            **m,
+            "value_at_age": eta_pt["optimized"],
+            "achievable": achievable,
+            "funding_gap": max(0, m["target_amount"] - eta_pt["optimized"]),
+        })
+
+    return {
+        "range": range,
+        "inflation_adjusted": inflation,
+        "start_age": start_age,
+        "end_age": end_age,
+        "today_value": round(total),
+        "future_value": points[-1]["optimized"],
+        "points": points,
+        "amount_milestones": amount_ms,
+        "life_milestones": life_ms,
+    }
+
+def range_years(a, b):
+    return list(range(a, b))
+
+
+# ----- Allocation Analytics -----
+@api.get("/allocation")
+async def allocation(user: dict = Depends(current_user), profile: str = None):
+    accounts = await db.accounts.find({"user_id": user["id"]}, {"_id": 0}).to_list(200)
+    risk = profile or user.get("risk_profile", "moderate")
+    cash = sum(a["balance"] for a in accounts if a["type"] in ("bank", "wallet"))
+    equity = sum(a["balance"] for a in accounts if a["type"] == "investment" and any(k in a["institution"].lower() for k in ["zerodha", "groww"]))
+    debt = sum(a["balance"] for a in accounts if a["type"] == "investment" and any(k in a["institution"] for k in ["EPFO", "PPF"]))
+    others = max(0, sum(a["balance"] for a in accounts if a["type"] == "investment") - equity - debt)
+    total = max(1, cash + equity + debt + others + 500000)  # add gold/etc estimate
+    gold_est = 120000
+    total += gold_est
+
+    current = {
+        "Cash": round(cash / total * 100, 1),
+        "Equity": round(equity / total * 100, 1),
+        "Debt": round(debt / total * 100, 1),
+        "Gold": round(gold_est / total * 100, 1),
+        "Others": round(others / total * 100, 1),
+    }
+    targets = {
+        "conservative": {"Cash": 15, "Equity": 25, "Debt": 40, "Gold": 10, "Others": 10},
+        "moderate": {"Cash": 12, "Equity": 55, "Debt": 18, "Gold": 8, "Others": 7},
+        "aggressive": {"Cash": 8, "Equity": 70, "Debt": 10, "Gold": 7, "Others": 5},
+    }
+    target = targets.get(risk, targets["moderate"])
+    drift = {k: round(target[k] - current[k], 1) for k in current}
+    rebalance_impact_15y = 3800000  # ₹38L
+    return {
+        "risk_profile": risk,
+        "current": current,
+        "recommended": target,
+        "drift": drift,
+        "rebalance_impact_15y": rebalance_impact_15y,
+        "rebalance_actions": [
+            {"from": "Cash", "to": "Equity", "amount": round(max(0, current["Cash"] - target["Cash"]) / 100 * total)},
+            {"from": "Others", "to": "Gold" if drift["Gold"] > 0 else "Debt", "amount": round(abs(min(0, drift.get("Others", 0))) / 100 * total)},
+        ],
+    }
+
+
+# ----- Bonds Recommendation -----
+@api.get("/bonds")
+async def bonds(user: dict = Depends(current_user)):
+    items = [
+        {"name": "HDFC 8.05% 2029", "issuer": "HDFC Ltd", "rating": "AAA", "yield_pct": 8.05, "duration_years": 4, "risk": "Very Low", "liquidity": "Listed", "horizon": "Mid", "min_invest": 10000},
+        {"name": "REC 7.95% 2030", "issuer": "REC Ltd", "rating": "AAA", "yield_pct": 7.95, "duration_years": 5, "risk": "Very Low", "liquidity": "Listed", "horizon": "Mid", "min_invest": 10000},
+        {"name": "NHAI 7.30% 2031", "issuer": "NHAI", "rating": "AAA", "yield_pct": 7.30, "duration_years": 6, "risk": "Very Low", "liquidity": "Listed (Tax-free)", "horizon": "Long", "min_invest": 10000},
+        {"name": "Tata Capital 8.40% 2027", "issuer": "Tata Capital", "rating": "AA", "yield_pct": 8.40, "duration_years": 2, "risk": "Low", "liquidity": "Listed", "horizon": "Short-Mid", "min_invest": 10000},
+        {"name": "Bajaj Finance 8.55% 2028", "issuer": "Bajaj Finance", "rating": "AA", "yield_pct": 8.55, "duration_years": 3, "risk": "Low", "liquidity": "Listed", "horizon": "Mid", "min_invest": 10000},
+        {"name": "L&T Finance 8.95% 2026", "issuer": "L&T Finance", "rating": "A", "yield_pct": 8.95, "duration_years": 1, "risk": "Low-Mid", "liquidity": "Listed", "horizon": "Short", "min_invest": 10000},
+        {"name": "Muthoot Finance 9.25% 2028", "issuer": "Muthoot", "rating": "A-", "yield_pct": 9.25, "duration_years": 3, "risk": "Mid", "liquidity": "Listed", "horizon": "Mid", "min_invest": 10000},
+        {"name": "Edelweiss 10.50% 2027", "issuer": "Edelweiss Fin", "rating": "BBB", "yield_pct": 10.50, "duration_years": 2, "risk": "High", "liquidity": "Limited", "horizon": "Mid", "min_invest": 10000},
+        {"name": "InCred 11.25% 2027", "issuer": "InCred", "rating": "BB", "yield_pct": 11.25, "duration_years": 2, "risk": "Very High", "liquidity": "Limited", "horizon": "Mid", "min_invest": 10000},
+    ]
+    return items
+
+
+# ----- Mutual Fund Analyst -----
+@api.get("/mutual-funds/top")
+async def top_funds(user: dict = Depends(current_user)):
+    cats = {
+        "Large Cap": [
+            {"name": "Nippon India Large Cap", "ret_1y": 22.4, "ret_3y": 17.8, "ret_5y": 16.2, "expense": 0.85, "rank": 1, "risk": "Moderate", "why": "Top quartile 5y, low expense"},
+            {"name": "ICICI Prudential Bluechip", "ret_1y": 19.8, "ret_3y": 16.4, "ret_5y": 15.5, "expense": 1.05, "rank": 2, "risk": "Moderate", "why": "Steady alpha vs Nifty 50"},
+        ],
+        "Flexi Cap": [
+            {"name": "Parag Parikh Flexi Cap", "ret_1y": 24.6, "ret_3y": 19.2, "ret_5y": 22.1, "expense": 0.59, "rank": 1, "risk": "Moderate", "why": "Best-in-class manager · global allocation"},
+            {"name": "HDFC Flexi Cap", "ret_1y": 20.2, "ret_3y": 18.5, "ret_5y": 17.8, "expense": 0.78, "rank": 2, "risk": "Moderate", "why": "Consistent vs benchmark"},
+        ],
+        "Mid Cap": [
+            {"name": "HDFC Mid-Cap Opportunities", "ret_1y": 28.4, "ret_3y": 22.1, "ret_5y": 24.6, "expense": 0.95, "rank": 1, "risk": "High", "why": "Top decile, aggressive allocation"},
+            {"name": "Motilal Oswal Midcap", "ret_1y": 31.2, "ret_3y": 24.5, "ret_5y": 25.8, "expense": 1.15, "rank": 2, "risk": "High", "why": "High alpha"},
+        ],
+        "Small Cap": [
+            {"name": "Nippon India Small Cap", "ret_1y": 32.1, "ret_3y": 28.4, "ret_5y": 28.9, "expense": 0.79, "rank": 1, "risk": "Very High", "why": "Largest AUM, deep research"},
+            {"name": "SBI Small Cap", "ret_1y": 26.4, "ret_3y": 24.1, "ret_5y": 26.5, "expense": 1.65, "rank": 2, "risk": "Very High", "why": "Steady compounder"},
+        ],
+        "Hybrid": [
+            {"name": "ICICI Pru Equity & Debt", "ret_1y": 18.5, "ret_3y": 16.2, "ret_5y": 16.4, "expense": 1.18, "rank": 1, "risk": "Moderate", "why": "Aggressive hybrid · tax efficient"},
+        ],
+        "Index": [
+            {"name": "UTI Nifty 50 Index", "ret_1y": 18.6, "ret_3y": 14.2, "ret_5y": 13.5, "expense": 0.21, "rank": 1, "risk": "Moderate", "why": "Lowest expense ratio"},
+            {"name": "HDFC Nifty Next 50", "ret_1y": 24.1, "ret_3y": 16.8, "ret_5y": 15.2, "expense": 0.30, "rank": 2, "risk": "Moderate", "why": "Better than Nifty 50 over 5y"},
+        ],
+        "Debt": [
+            {"name": "ICICI Pru Corporate Bond", "ret_1y": 7.4, "ret_3y": 6.8, "ret_5y": 7.2, "expense": 0.30, "rank": 1, "risk": "Low", "why": "AAA-only · stable"},
+        ],
+        "ELSS": [
+            {"name": "Quant ELSS Tax Saver", "ret_1y": 28.5, "ret_3y": 26.2, "ret_5y": 27.4, "expense": 0.65, "rank": 1, "risk": "High", "why": "Best 5y in ELSS · Section 80C"},
+        ],
+        "International": [
+            {"name": "Motilal Oswal Nasdaq 100 FoF", "ret_1y": 32.4, "ret_3y": 18.5, "ret_5y": 20.1, "expense": 0.55, "rank": 1, "risk": "High", "why": "US tech exposure · diversification"},
+        ],
+    }
+    user_holding_xirr = 11.2
+    benchmark = 14.0
+    return {
+        "user_mf_xirr": user_holding_xirr,
+        "benchmark_xirr": benchmark,
+        "underperforming": user_holding_xirr < benchmark,
+        "categories": cats,
+    }
+
+
+# ----- Gold / Silver Live Tracker -----
+@api.get("/precious-metals")
+async def precious_metals(user: dict = Depends(current_user)):
+    now = datetime.now(timezone.utc)
+    def trend(start, end, n):
+        step = (end - start) / max(1, n - 1)
+        return [{"d": (now - timedelta(days=i)).strftime("%d %b"), "v": round(start + step * (n - 1 - i) + random.uniform(-50, 50))} for i in range(n - 1, -1, -1)]
+    gold_year = trend(7900, 7240, 12)
+    silver_year = trend(95000, 92500, 12)
+    return {
+        "gold": {
+            "spot": 7240, "unit": "₹/g (24K)",
+            "change_1m": -3.8, "change_3m": -7.2, "change_1y": -8.4, "change_from_peak": -10.8,
+            "year_high": 8120, "year_low": 6890,
+            "trend_1y": gold_year,
+            "ai_signal": "Buy zone · staggered SIP",
+            "reason": "Corrected -10.8% from peak. Safe-haven demand intact + INR weakness tailwind.",
+            "user_holding_value": 120000,
+            "user_target_pct": 8.0,
+            "user_current_pct": 4.9,
+        },
+        "silver": {
+            "spot": 92500, "unit": "₹/kg",
+            "change_1m": -5.1, "change_3m": -9.4, "change_1y": -2.6, "change_from_peak": -12.8,
+            "year_high": 106000, "year_low": 88500,
+            "trend_1y": silver_year,
+            "ai_signal": "Accumulation zone",
+            "reason": "Near 1Y low. Industrial demand + solar/EV use case strengthens long-term thesis.",
+            "user_holding_value": 35000,
+            "user_target_pct": 3.0,
+            "user_current_pct": 1.4,
+        },
+    }
+
+
+# ----- XIRR Analytics -----
+@api.get("/xirr-analytics")
+async def xirr_analytics(user: dict = Depends(current_user)):
+    items = [
+        {"asset": "Indian Equity", "xirr": 18.4, "benchmark": 14.2, "alpha": 4.2, "quality_score": 88, "value": 320000, "icon": "TrendingUp"},
+        {"asset": "US Equity", "xirr": 12.1, "benchmark": 11.8, "alpha": 0.3, "quality_score": 72, "value": 180000, "icon": "Globe"},
+        {"asset": "Mutual Funds", "xirr": 11.2, "benchmark": 14.0, "alpha": -2.8, "quality_score": 58, "value": 420000, "icon": "PieChart"},
+        {"asset": "Gold", "xirr": 10.8, "benchmark": 10.0, "alpha": 0.8, "quality_score": 78, "value": 120000, "icon": "Coins"},
+        {"asset": "Silver", "xirr": 6.2, "benchmark": 8.0, "alpha": -1.8, "quality_score": 62, "value": 35000, "icon": "Coins"},
+    ]
+    return items
 
 
 # ----- Health -----
