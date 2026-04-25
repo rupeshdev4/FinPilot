@@ -1,0 +1,133 @@
+{
+  "project_name": "FinPilot",
+  "theme": "hybrid (light preferred, dark supported)",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) + Archetype 1 (Organic & Earthy Trust)",
+  "design_philosophy": "Premium Indian Fintech SaaS. Combines Apple-level simplicity (rounded forms, soft shadows, heavy whitespace) with Stripe-quality data visualization (crisp charts, deep navy contrasts, electric accents). Dense but breathable 'Control Room' dashboard strategy.",
+  "colors": {
+    "light_mode": {
+      "background": "#FAFAFA",
+      "surface": "#FFFFFF",
+      "primary": "#0B132B",
+      "primary_foreground": "#FFFFFF",
+      "accent": "#00D084",
+      "accent_foreground": "#022C22",
+      "secondary": "#4F46E5",
+      "secondary_foreground": "#FFFFFF",
+      "muted": "#F1F5F9",
+      "muted_foreground": "#64748B",
+      "border": "#E2E8F0",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444"
+    },
+    "dark_mode": {
+      "background": "#0B132B",
+      "surface": "#131F3A",
+      "primary": "#00D084",
+      "primary_foreground": "#0B132B",
+      "accent": "#00D084",
+      "accent_foreground": "#022C22",
+      "secondary": "#818CF8",
+      "secondary_foreground": "#FFFFFF",
+      "muted": "#1E293B",
+      "muted_foreground": "#94A3B8",
+      "border": "#334155",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "danger": "#EF4444"
+    },
+    "chart_palette": [
+      "#00D084",
+      "#4F46E5",
+      "#38BDF8",
+      "#818CF8",
+      "#F472B6"
+    ]
+  },
+  "typography": {
+    "font_families": {
+      "headings": "Outfit, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "IBM Plex Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl lg:text-5xl font-bold tracking-tight text-primary",
+      "h2": "text-2xl lg:text-3xl font-semibold tracking-tight text-primary",
+      "h3": "text-xl font-medium tracking-tight text-primary",
+      "card_title": "text-lg font-semibold tracking-tight text-primary",
+      "body": "text-base font-normal leading-relaxed text-muted-foreground",
+      "small": "text-sm font-medium text-muted-foreground",
+      "micro_label": "text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground",
+      "currency_large": "text-3xl lg:text-4xl font-bold tracking-tight text-primary font-headings"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous Spacing (E1 Standard) paired with 'Control Room' Grid.",
+    "dashboard_grid": {
+      "container": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "hero_widget": "col-span-1 md:col-span-3 lg:col-span-4",
+      "primary_chart": "col-span-1 md:col-span-2 lg:col-span-3",
+      "side_panel": "col-span-1 lg:col-span-1"
+    },
+    "padding": {
+      "page": "p-6 md:p-8 lg:p-12",
+      "card": "p-6 md:p-8"
+    },
+    "surfaces": {
+      "card_light": "bg-white rounded-2xl border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
+      "card_dark": "bg-[#131F3A] rounded-2xl border border-slate-800 shadow-none",
+      "glass_header": "bg-white/70 backdrop-blur-xl border-b border-slate-200/50 dark:bg-[#0B132B]/70 dark:border-slate-800/50",
+      "ai_panel": "relative overflow-hidden bg-gradient-to-br from-indigo-50 to-emerald-50 dark:from-indigo-950/20 dark:to-emerald-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 dark:bg-accent dark:text-accent-foreground dark:hover:bg-accent/90 h-11 px-6 rounded-xl font-medium transition-all",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/90 h-11 px-6 rounded-xl font-medium transition-all",
+      "outline": "border border-slate-200 bg-transparent hover:bg-slate-50 text-slate-900 dark:border-slate-800 dark:hover:bg-slate-900 dark:text-slate-100 h-11 px-6 rounded-xl font-medium transition-all",
+      "ghost": "bg-transparent hover:bg-slate-100 text-slate-700 dark:hover:bg-slate-800 dark:text-slate-300 h-11 px-6 rounded-xl transition-all"
+    },
+    "inputs": {
+      "default": "h-12 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent dark:bg-[#1A2642] dark:border-slate-700"
+    },
+    "charts": {
+      "guidelines": "Use Recharts. Use fluid container widths. Area charts MUST use deep-to-transparent gradients. Tooltips must have custom rich rendering matching the card surface style.",
+      "metrics": "Always format currency as Indian Rupees (₹) using Lakh (L) and Crore (Cr) notation. E.g., ₹2.5L, ₹1.2Cr."
+    },
+    "navigation": {
+      "mobile": "Fixed bottom navigation bar (h-16) with glassmorphism (bg-white/80 backdrop-blur-md) and active state indicator (accent color).",
+      "desktop": "Left sidebar (w-64) with high-contrast active states. Top nav for global search, user profile, and notifications."
+    }
+  },
+  "animations": {
+    "hover": "transition-transform duration-300 ease-out hover:-translate-y-1 hover:shadow-lg",
+    "tap": "active:scale-95 transition-transform",
+    "entrance": "Use Framer Motion to stagger card entrances: initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, staggerChildren: 0.1 }}",
+    "charts": "Animate line/area drawings using Recharts native animations."
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width 2px for standard, 1.5px for large icons."
+    },
+    "images": {
+      "user_avatar": "https://images.unsplash.com/photo-1649433658557-54cf58577c68?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1ODF8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBpbmRpYW4lMjBtYW4lMjBwb3J0cmFpdCUyMGhlYWRzaG90fGVufDB8fHx8MTc3NzEzOTAzNnww&ixlib=rb-4.1.0&q=85",
+      "ai_background_texture": "https://images.unsplash.com/photo-1775874461766-d9f353f3c10c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGdyZWVuJTIwYmx1ZSUyMHNvZnQlMjBncmFkaWVudCUyMHRleHR1cmV8ZW58MHx8fHwxNzc3MTM5MDM3fDA&ixlib=rb-4.1.0&q=85",
+      "bank_logos": "Instructing agent to use clearbit API: `https://logo.clearbit.com/hdfcbank.com`, `https://logo.clearbit.com/icicibank.com`, `https://logo.clearbit.com/onlinesbi.sbi`"
+    }
+  },
+  "testing": {
+    "guidelines": "ALL interactive elements (buttons, links, form inputs, tabs) and key informational metrics (Net Worth, Goals) MUST include a `data-testid` attribute using kebab-case role-based naming (e.g., `data-testid='net-worth-value'`, `data-testid='add-goal-submit-button'`)."
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color palette: Deep Blue (#0B132B) for layout/structure, Emerald Green (#00D084) for primary actions and positive trends.",
+    "Use Outfit for headings and IBM Plex Sans for body text.",
+    "Implement the 'Control Room' grid layout for the Home Dashboard. Top-left must feature the North Star Metric (Net Worth).",
+    "Cards must use rounded-2xl with p-6 or p-8 internal padding. No dense, cramped UI.",
+    "Always format currency in Indian format: ₹ Lakh/Crore.",
+    "For the AI Coach, use the provided abstract texture with a glassmorphism overlay to make it feel premium and intelligent.",
+    "Ensure the layout is truly mobile-first (bottom navigation on mobile, sidebar on desktop).",
+    "Avoid image-heavy hero sections; this is an operational dashboard. Focus on data visualization, empty states, and actionable widgets.",
+    "Every button and clickable element MUST have a `data-testid` attribute for automated testing."
+  ]
+}
