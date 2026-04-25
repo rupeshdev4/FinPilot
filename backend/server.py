@@ -190,27 +190,30 @@ INDIA_BANKS = ["HDFC Bank", "ICICI Bank", "SBI"]
 WALLETS = ["Paytm", "PhonePe", "Google Pay"]
 BROKERS = ["Zerodha", "Groww"]
 MERCHANTS = {
-    "Food": ["Swiggy", "Zomato", "Blinkit", "Big Basket", "Starbucks", "Cafe Coffee Day"],
-    "Travel": ["Uber", "Ola", "IndiGo", "IRCTC", "MakeMyTrip"],
-    "Shopping": ["Amazon", "Flipkart", "Myntra", "Nykaa", "Croma"],
-    "Bills": ["Airtel", "Jio", "BESCOM", "Tata Power", "Act Fibernet"],
-    "Rent": ["NoBroker", "Landlord Transfer"],
-    "EMI": ["HDFC Home Loan", "Bajaj Finserv", "ICICI Auto Loan"],
+    "Food": ["Swiggy", "Zomato", "Blinkit", "BigBasket", "Zepto", "Starbucks", "Cafe Coffee Day", "Domino's Pizza", "McDonald's", "Haldiram's", "Third Wave Coffee", "Local Kirana"],
+    "Travel": ["Uber", "Ola", "IndiGo", "IRCTC", "MakeMyTrip", "Rapido", "Yulu", "Goibibo", "Vistara"],
+    "Shopping": ["Amazon", "Flipkart", "Myntra", "Nykaa", "Croma", "Tata CLiQ", "Ajio", "Decathlon", "Reliance Digital"],
+    "Bills": ["Airtel", "Jio", "BESCOM", "Tata Power", "ACT Fibernet", "Vi Postpaid", "BWSSB", "Indane Gas"],
+    "Rent": ["NoBroker UPI", "Landlord (Suresh K) UPI"],
+    "EMI": ["HDFC Home Loan", "Bajaj Finserv", "ICICI Auto Loan", "Axis Personal Loan"],
     "Salary": ["Acme Corp Payroll"],
-    "Investments": ["Zerodha Coin", "Groww SIP", "ET Money"],
-    "Healthcare": ["Apollo Pharmacy", "Practo", "1mg"],
-    "Entertainment": ["Netflix", "Spotify", "Hotstar", "BookMyShow"],
-    "Other": ["Misc"],
+    "Investments": ["Zerodha Coin SIP", "Groww SIP", "ET Money SIP", "Kuvera SIP", "Smallcase"],
+    "Healthcare": ["Apollo Pharmacy", "Practo", "1mg", "PharmEasy", "Manipal Hospital", "Cult.fit"],
+    "Entertainment": ["Netflix", "Spotify", "Hotstar", "BookMyShow", "Prime Video", "Sony LIV", "PVR Cinemas"],
+    "Other": ["Petrol Pump UPI", "ATM Withdrawal", "Friend Transfer UPI", "Salon UPI", "Misc"],
 }
+
+UPI_HANDLES = ["@okhdfcbank", "@oksbi", "@okicici", "@ybl", "@paytm", "@axl"]
+
 
 async def seed_demo_data(user_id: str):
     """Seed realistic Indian fintech data for a new user."""
     now = datetime.now(timezone.utc)
 
-    # Accounts
+    # Accounts — HDFC + ICICI explicitly populated with healthy amounts
     accounts = [
-        {"name": "HDFC Savings", "type": "bank", "institution": "HDFC Bank", "balance": 285000, "change_pct": 2.3, "health": "good"},
-        {"name": "ICICI Salary", "type": "bank", "institution": "ICICI Bank", "balance": 145000, "change_pct": -1.2, "health": "good"},
+        {"name": "HDFC Bank Savings", "type": "bank", "institution": "HDFC Bank", "balance": 285000, "change_pct": 2.3, "health": "good"},
+        {"name": "ICICI Bank Salary", "type": "bank", "institution": "ICICI Bank", "balance": 145000, "change_pct": -1.2, "health": "good"},
         {"name": "SBI Joint", "type": "bank", "institution": "SBI", "balance": 95000, "change_pct": 0.8, "health": "good"},
         {"name": "PhonePe Wallet", "type": "wallet", "institution": "PhonePe", "balance": 4500, "change_pct": 12, "health": "good"},
         {"name": "Paytm", "type": "wallet", "institution": "Paytm", "balance": 2300, "change_pct": -5, "health": "good"},
@@ -227,46 +230,54 @@ async def seed_demo_data(user_id: str):
         docs.append(d)
     await db.accounts.insert_many([d.copy() for d in docs])
 
-    # Transactions - last 90 days, ~50 txns
-    cats_dist = ["Salary"] + ["Food"]*8 + ["Travel"]*6 + ["Shopping"]*7 + ["Bills"]*5 + ["Rent"] + ["EMI"]*2 + ["Investments"]*3 + ["Healthcare"]*3 + ["Entertainment"]*5 + ["Other"]*4
+    # 50 transactions — mix UPI + cards + autodebit; realistic Indian merchant set
     txns = []
-    for i in range(55):
-        days_ago = random.randint(0, 90)
-        date = now - timedelta(days=days_ago, hours=random.randint(0, 23))
-        cat = random.choice(cats_dist)
+    # Fixed monthly anchors (3 months)
+    for m_back in range(3):
+        # Salary on 1st
+        txns.append({"id": str(uuid.uuid4()), "user_id": user_id, "amount": 120000, "category": "Salary", "merchant": "Acme Corp Payroll", "note": "NEFT credit", "date": (now - timedelta(days=30 * m_back, hours=random.randint(8, 17))).replace(day=1).isoformat()})
+        # Rent on 3rd
+        txns.append({"id": str(uuid.uuid4()), "user_id": user_id, "amount": -32000, "category": "Rent", "merchant": "Landlord (Suresh K) UPI", "note": "UPI@okicici Ref " + str(random.randint(100000000, 999999999)), "date": (now - timedelta(days=30 * m_back)).replace(day=3).isoformat()})
+        # EMI on 5th
+        txns.append({"id": str(uuid.uuid4()), "user_id": user_id, "amount": -18500, "category": "EMI", "merchant": "HDFC Home Loan", "note": "Auto-debit", "date": (now - timedelta(days=30 * m_back)).replace(day=5).isoformat()})
+        # SIPs on 7th
+        txns.append({"id": str(uuid.uuid4()), "user_id": user_id, "amount": -15000, "category": "Investments", "merchant": "Groww SIP", "note": "Mirae Asset Large Cap", "date": (now - timedelta(days=30 * m_back)).replace(day=7).isoformat()})
+        txns.append({"id": str(uuid.uuid4()), "user_id": user_id, "amount": -10000, "category": "Investments", "merchant": "Zerodha Coin SIP", "note": "Parag Parikh Flexi Cap", "date": (now - timedelta(days=30 * m_back)).replace(day=7).isoformat()})
+
+    # Variable spends — 35 mixed
+    cats_dist = ["Food"]*9 + ["Travel"]*5 + ["Shopping"]*6 + ["Bills"]*4 + ["Healthcare"]*3 + ["Entertainment"]*4 + ["Other"]*4
+    random.shuffle(cats_dist)
+    for cat in cats_dist:
+        days_ago = random.randint(0, 75)
         merchant = random.choice(MERCHANTS[cat])
-        if cat == "Salary":
-            amt = 120000
-            date = (now - timedelta(days=random.choice([1, 31, 61])))
-        elif cat == "Rent":
-            amt = -32000
-            date = (now - timedelta(days=random.choice([3, 33, 63])))
-        elif cat == "EMI":
-            amt = -18500 if "Home" in merchant else -8500
-        elif cat == "Investments":
-            amt = -25000 if "SIP" in merchant else -random.choice([5000, 10000, 15000])
-        elif cat == "Bills":
-            amt = -random.choice([499, 799, 1500, 2400, 3500])
-        elif cat == "Food":
-            amt = -random.choice([180, 280, 420, 650, 850, 1200])
+        is_upi = cat in ("Food", "Travel", "Other") or "UPI" in merchant
+        upi_ref = f"UPI{random.choice(UPI_HANDLES)} Ref {random.randint(100000000, 999999999)}" if is_upi else "Card POS"
+        if cat == "Food":
+            amt = -random.choice([149, 220, 285, 380, 480, 650, 850, 1200, 1850])
         elif cat == "Travel":
-            amt = -random.choice([120, 180, 350, 800, 2400, 6500])
+            amt = -random.choice([85, 120, 180, 350, 580, 1240, 2400, 6500])
         elif cat == "Shopping":
-            amt = -random.choice([499, 1200, 2500, 4500, 7800])
+            amt = -random.choice([499, 899, 1299, 2499, 4500, 7800, 12000])
+        elif cat == "Bills":
+            amt = -random.choice([299, 499, 799, 1500, 2400, 3500])
         elif cat == "Healthcare":
-            amt = -random.choice([300, 850, 1500, 3200])
+            amt = -random.choice([180, 450, 850, 1500, 3200])
         elif cat == "Entertainment":
-            amt = -random.choice([149, 199, 399, 799])
+            amt = -random.choice([149, 199, 399, 649, 799])
         else:
-            amt = -random.choice([200, 500, 1000, 2000])
+            amt = -random.choice([100, 250, 500, 1000, 2000, 5000])
         txns.append({
             "id": str(uuid.uuid4()),
             "user_id": user_id,
-            "date": date.isoformat(),
+            "date": (now - timedelta(days=days_ago, hours=random.randint(7, 23), minutes=random.randint(0, 59))).isoformat(),
             "amount": amt,
             "category": cat,
             "merchant": merchant,
+            "note": upi_ref,
         })
+
+    # Trim to exactly 50
+    txns = txns[:50]
     await db.transactions.insert_many(txns)
 
     # Goals
