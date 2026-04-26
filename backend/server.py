@@ -29,6 +29,9 @@ JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALGO = os.environ['JWT_ALGORITHM']
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
+# Bump this when backend seed_demo_data() changes — clients with older seed_version see "Sync issue?" badge
+SEED_VERSION = 4
+
 app = FastAPI(title="FinPilot API")
 api = APIRouter(prefix="/api")
 security = HTTPBearer(auto_error=False)
@@ -326,6 +329,7 @@ async def signup(req: SignupReq):
     doc = user.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     doc["password_hash"] = hash_pw(req.password)
+    doc["seed_version"] = SEED_VERSION
     await db.users.insert_one(doc)
     await seed_demo_data(user.id)
     return {"token": make_token(user.id), "user": serialize(doc)}
@@ -362,6 +366,7 @@ async def google_session(req: GoogleSessionReq):
         doc = user.model_dump()
         doc["created_at"] = doc["created_at"].isoformat()
         doc["password_hash"] = ""
+        doc["seed_version"] = SEED_VERSION
         await db.users.insert_one(doc)
         await seed_demo_data(user.id)
         u = doc
@@ -370,6 +375,27 @@ async def google_session(req: GoogleSessionReq):
 @api.get("/auth/me")
 async def me(user: dict = Depends(current_user)):
     return serialize(user)
+
+
+@api.get("/me/sync-status")
+async def sync_status(user: dict = Depends(current_user)):
+    user_v = int(user.get("seed_version", 1))
+    return {
+        "stale": user_v < SEED_VERSION,
+        "user_seed_version": user_v,
+        "server_seed_version": SEED_VERSION,
+    }
+
+
+@api.post("/me/refresh-data")
+async def refresh_data(user: dict = Depends(current_user)):
+    """Wipe & reseed the user's demo data; bump their seed_version to current."""
+    uid = user["id"]
+    for coll in ["accounts", "transactions", "goals", "budgets", "milestones", "chats"]:
+        await db[coll].delete_many({"user_id": uid})
+    await seed_demo_data(uid)
+    await db.users.update_one({"id": uid}, {"$set": {"seed_version": SEED_VERSION, "onboarded": True}})
+    return {"ok": True, "seed_version": SEED_VERSION}
 
 
 # ----- Onboarding -----

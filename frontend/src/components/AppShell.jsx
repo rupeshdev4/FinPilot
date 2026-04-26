@@ -3,6 +3,7 @@ import { Home, Wallet, Target, TrendingUp, BarChart3, Sparkles, User, Sun, Moon,
 import { useTheme } from "next-themes";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import SyncBadge from "@/components/SyncBadge";
 
 const NAV = [
   { to: "/app", label: "Home", icon: Home, end: true },
@@ -87,9 +88,16 @@ export default function AppShell({ children }) {
             <div className="w-8 h-8 rounded-lg bg-accent text-accent-foreground grid place-items-center font-bold font-headings text-sm">F</div>
             <span className="font-headings font-bold">FinPilot</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} data-testid="mobile-theme-toggle">
-            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </Button>
+          <div className="flex items-center gap-2">
+            <SyncBadge />
+            <Button variant="ghost" size="sm" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} data-testid="mobile-theme-toggle">
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
+          </div>
+        </div>
+        {/* Desktop floating sync badge */}
+        <div className="hidden lg:block sticky top-3 z-30 px-10 -mb-4 flex justify-end">
+          <div className="flex justify-end"><SyncBadge /></div>
         </div>
         {children}
       </main>
